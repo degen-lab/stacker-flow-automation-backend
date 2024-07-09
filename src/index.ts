@@ -1,5 +1,16 @@
 import { fetchPoxInfo } from './api-calls';
-import { getEvents, getRewardIndexesMap, parseEvents } from './helpers';
+import {
+  createTables,
+  getEvents,
+  getRewardIndexesMap,
+  parseEvents,
+} from './helpers';
+import {
+  saveAcceptedDelegations,
+  saveCommittedDelegations,
+  saveDelegations,
+  savePreviousDelegations,
+} from './save-data';
 
 const main = async () => {
   try {
@@ -34,6 +45,15 @@ const main = async () => {
     console.log('Accepted Delegations:', acceptedDelegations);
     console.log('Committed Delegations:', committedDelegations);
     console.log('Previous Delegations:', previousDelegations);
+
+    await createTables();
+
+    await saveDelegations(delegations);
+    await saveAcceptedDelegations(acceptedDelegations);
+    await saveCommittedDelegations(committedDelegations);
+    await savePreviousDelegations(previousDelegations);
+
+    console.log('Data has been saved successfully.');
   } catch (error) {
     console.error('Error:', error);
   }

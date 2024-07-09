@@ -1,6 +1,13 @@
 import { poxAddressToBtcAddress } from '@stacks/stacking';
 import { LIMIT, STACKS_NETWORK, POOL_OPERATOR } from './consts';
 import { fetchData, fetchRewardCycleIndex } from './api-calls';
+import { query } from './db';
+import {
+  createAcceptedDelegationsTable,
+  createCommittedDelegationsTable,
+  createDelegationsTable,
+  createPreviousDelegationsTable,
+} from './models';
 
 export const parseStringToJSON = (input: string) => {
   const parseValue = (value: string): string | null | NonNullable<unknown> => {
@@ -461,4 +468,11 @@ export const getRewardIndexesMap = async () => {
   }
 
   return map;
+};
+
+export const createTables = async () => {
+  await query(createDelegationsTable);
+  await query(createAcceptedDelegationsTable);
+  await query(createCommittedDelegationsTable);
+  await query(createPreviousDelegationsTable);
 };
