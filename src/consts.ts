@@ -23,8 +23,6 @@ const getStacksNetworkName = (network: NetworkUsed): StacksNetworkName => {
 
 export const STACKS_NETWORK: StacksNetworkName = getStacksNetworkName(NETWORK);
 
-console.log(STACKS_NETWORK); // This should log 'testnet' since NETWORK is set to NetworkUsed.Testnet
-
 const API_CONFIG = {
   [NetworkUsed.Mainnet]: {
     API_URL: 'https://api.mainnet.hiro.so/extended/v1/tx/events',
