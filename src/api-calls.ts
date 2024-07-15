@@ -5,6 +5,7 @@ import {
   LIMIT,
   POX_INFO_URL,
   REWARD_INDEXES_API_URL,
+  GET_TRANSACTION_API_URL,
 } from './consts';
 import {
   hexToCV,
@@ -86,6 +87,28 @@ export const fetchRewardCycleIndex = async (
       }
     } else {
       console.error(`Error fetching reward cycle index info: ${error}`);
+    }
+    return null;
+  }
+};
+
+export const fetchTransactionInfo = async (txid: string): Promise<any> => {
+  try {
+    const response = await axios.get(GET_TRANSACTION_API_URL(txid));
+
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      if (error.response.status === 429) {
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+        return fetchTransactionInfo(txid);
+      } else if (error.response.status === 404) {
+        return null;
+      } else {
+        console.error(`Error fetching transaction info: ${error}`);
+      }
+    } else {
+      console.error(`Error fetching transaction info: ${error}`);
     }
     return null;
   }

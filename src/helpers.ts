@@ -1,13 +1,44 @@
-import { poxAddressToBtcAddress } from '@stacks/stacking';
-import { LIMIT, STACKS_NETWORK, POOL_OPERATOR } from './consts';
-import { fetchData, fetchRewardCycleIndex } from './api-calls';
+import { poxAddressToBtcAddress, StackingClient } from '@stacks/stacking';
+import {
+  LIMIT,
+  STACKS_NETWORK_NAME,
+  POOL_OPERATOR,
+  MAX_CYCLES_FOR_OPERATIONS,
+  STACKS_NETWORK_INSTANCE,
+  FIRST_POX_4_CYCLE,
+} from './consts';
+import {
+  fetchData,
+  fetchRewardCycleIndex,
+  fetchTransactionInfo,
+} from './api-calls';
 import { query } from './db';
 import {
+  clearAcceptedDelegations,
+  clearCommittedDelegations,
+  clearDelegations,
+  clearPreviousDelegations,
   createAcceptedDelegationsTable,
   createCommittedDelegationsTable,
   createDelegationsTable,
+  createPendingTransactionsTable,
   createPreviousDelegationsTable,
 } from './models';
+import { DatabaseEntry, AvailableTransaction } from './types';
+import {
+  acceptDelegation,
+  commitDelegation,
+  extendDelegation,
+  increaseCommitment,
+  increaseDelegation,
+  sleep,
+} from './transactions';
+import {
+  deletePendingTransaction,
+  getPendingTransactions,
+  savePendingTransaction,
+} from './save-data';
+import { getNonce } from '@stacks/transactions';
 
 export const parseStringToJSON = (input: string) => {
   const parseValue = (value: string): string | null | NonNullable<unknown> => {
@@ -131,7 +162,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -159,7 +190,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -179,7 +210,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -201,7 +232,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -213,6 +244,7 @@ export const getEvents = async () => {
               name: result.name,
               amountUstx: result.data['amount-ustx'],
               cycle: result.data['reward-cycle'],
+              signerKey: result.data['signer-key'],
               poxAddress:
                 result.data['pox-addr'] != null
                   ? poxAddressToBtcAddress(
@@ -223,7 +255,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -243,7 +275,7 @@ export const getEvents = async () => {
                           'hex'
                         )
                       ),
-                      STACKS_NETWORK
+                      STACKS_NETWORK_NAME
                     )
                   : null,
             });
@@ -276,6 +308,7 @@ export const parseEvents = async (events: any, rewardIndexesMap: any) => {
       increaseBy,
       totalLocked,
       cycle,
+      signerKey,
     } = event;
 
     switch (name) {
@@ -313,10 +346,8 @@ export const parseEvents = async (events: any, rewardIndexesMap: any) => {
           const existingList = acceptedDelegations.get(stacker);
           const lastEntry = existingList[existingList.length - 1];
 
-          if (lastEntry.endCycle === startCycle) {
-            lastEntry.endCycle = endCycle;
-            acceptedDelegations.set(stacker, existingList);
-          }
+          lastEntry.endCycle = endCycle;
+          acceptedDelegations.set(stacker, existingList);
         }
         break;
 
@@ -326,10 +357,7 @@ export const parseEvents = async (events: any, rewardIndexesMap: any) => {
           const lastEntry = existingList[existingList.length - 1];
 
           if (lastEntry.amountUstx + increaseBy === totalLocked) {
-            if (
-              lastEntry.startCycle === startCycle &&
-              lastEntry.endCycle === endCycle
-            ) {
+            if (lastEntry.startCycle === startCycle) {
               lastEntry.amountUstx += increaseBy;
             } else {
               const newEntry = {
@@ -356,6 +384,8 @@ export const parseEvents = async (events: any, rewardIndexesMap: any) => {
               : getRewardIndexForCycleAndAddress(
                   cycle,
                   poxAddress,
+                  signerKey,
+                  amountUstx,
                   rewardIndexesMap
                 );
 
@@ -406,13 +436,31 @@ export const parseEvents = async (events: any, rewardIndexesMap: any) => {
 const getRewardIndexForCycleAndAddress = (
   rewardCycle: number,
   poxAddress: string,
-  rewardIndexesMap: Map<number, [{ rewardIndex: number; poxAddress: string }]>
+  signerKey: string,
+  totalUstx: number,
+  rewardIndexesMap: Map<
+    number,
+    [
+      {
+        rewardIndex: number;
+        poxAddress: string;
+        signer: string;
+        stacker: string | null;
+        totalUstx: string;
+      }
+    ]
+  >
 ) => {
   const rewardIndexesForCycle = rewardIndexesMap.get(rewardCycle);
 
   if (rewardIndexesForCycle) {
     for (const entry of rewardIndexesForCycle) {
-      if (entry.poxAddress === poxAddress) {
+      if (
+        entry.poxAddress === poxAddress &&
+        entry.signer === signerKey &&
+        entry.stacker === null &&
+        entry.totalUstx === totalUstx.toString()
+      ) {
         return entry.rewardIndex;
       }
     }
@@ -421,9 +469,9 @@ const getRewardIndexForCycleAndAddress = (
   return null;
 };
 
-export const getRewardIndexesMap = async () => {
+export const getRewardIndexesMap = async (currentCycle: number) => {
   const map = new Map();
-  let rewardCycle = 84;
+  let rewardCycle = FIRST_POX_4_CYCLE;
   let rewardIndex = 0;
   let continueFetching = true;
 
@@ -434,7 +482,16 @@ export const getRewardIndexesMap = async () => {
     );
 
     if (rewardCycleIndexData.value === null) {
-      if (rewardIndex === 0) {
+      if (
+        rewardCycle >
+          currentCycle +
+            (MAX_CYCLES_FOR_OPERATIONS < 1
+              ? 1
+              : MAX_CYCLES_FOR_OPERATIONS > 12
+              ? 12
+              : MAX_CYCLES_FOR_OPERATIONS) &&
+        rewardIndex === 0
+      ) {
         continueFetching = false;
         break;
       } else {
@@ -454,12 +511,18 @@ export const getRewardIndexesMap = async () => {
       Uint8Array.from(
         Buffer.from(poxAddressCV.hashbytes.value.slice(2), 'hex')
       ),
-      STACKS_NETWORK
+      STACKS_NETWORK_NAME
     );
+    const signer = rewardCycleIndexData.value.value.signer.value;
+    const stacker = rewardCycleIndexData.value.value.stacker.value;
+    const totalUstx = rewardCycleIndexData.value.value['total-ustx'].value;
 
     const rewardIndexData = {
       rewardIndex,
       poxAddress,
+      signer,
+      stacker,
+      totalUstx,
     };
 
     map.get(rewardCycle).push(rewardIndexData);
@@ -475,4 +538,400 @@ export const createTables = async () => {
   await query(createAcceptedDelegationsTable);
   await query(createCommittedDelegationsTable);
   await query(createPreviousDelegationsTable);
+  await query(createPendingTransactionsTable);
+
+  await clearTables();
+};
+
+export const clearTables = async () => {
+  await query(clearDelegations);
+  await query(clearPreviousDelegations);
+  await query(clearAcceptedDelegations);
+  await query(clearCommittedDelegations);
+};
+
+export const wasTransactionBroadcasted = (
+  dbEntries: DatabaseEntry[],
+  transaction: DatabaseEntry
+) => {
+  const match = dbEntries.some(
+    (entry) =>
+      entry.functionName === transaction.functionName &&
+      (entry.stacker === transaction.stacker ||
+        (entry.stacker == null && transaction.stacker == null)) &&
+      (entry.poxAddress === transaction.poxAddress ||
+        (entry.poxAddress == null && transaction.poxAddress == null)) &&
+      (entry.rewardCycle === transaction.rewardCycle ||
+        (entry.rewardCycle == null && transaction.rewardCycle == null))
+  );
+
+  return match;
+};
+
+const processTransactions = async (
+  availableTransactions: any,
+  nonce: bigint,
+  poolClient: StackingClient
+) => {
+  let localNonce = nonce;
+  const dbEntries = await removeAnchoredTransactionsFromDatabase();
+
+  for (const transaction of availableTransactions) {
+    if (!wasTransactionBroadcasted(dbEntries, transaction)) {
+      switch (transaction.functionName) {
+        case 'delegate-stack-stx':
+          const txidAcceptedDelegation = await acceptDelegation(
+            transaction.stacker,
+            transaction.amountUstx,
+            transaction.currentBlock,
+            transaction.poxAddress,
+            transaction.maxCycles,
+            localNonce,
+            poolClient
+          );
+          localNonce++;
+          await savePendingTransaction({
+            ...transaction,
+            txid: txidAcceptedDelegation,
+          });
+          console.log(
+            `Delegation from ${transaction.stacker} was accepted for ${transaction.amountUstx} uSTX for ${transaction.maxCycles} cycles. Txid: ${txidAcceptedDelegation}`
+          );
+          break;
+
+        case 'delegate-stack-extend':
+          const txidExtendedDelegation = await extendDelegation(
+            transaction.stacker,
+            transaction.poxAddress,
+            transaction.maxExtendCycles,
+            localNonce,
+            poolClient
+          );
+          localNonce++;
+          await savePendingTransaction({
+            ...transaction,
+            txid: txidExtendedDelegation,
+          });
+          console.log(
+            `Delegation from ${transaction.stacker} was extended for ${transaction.maxExtendCycles} cycles. Txid: ${txidExtendedDelegation}`
+          );
+          break;
+
+        case 'delegate-stack-increase':
+          const txidIncreasedDelegation = await increaseDelegation(
+            transaction.stacker,
+            transaction.poxAddress,
+            transaction.increaseAmount,
+            localNonce,
+            poolClient
+          );
+          localNonce++;
+          await savePendingTransaction({
+            ...transaction,
+            txid: txidIncreasedDelegation,
+          });
+          console.log(
+            `Delegation from ${transaction.stacker} was increased by ${transaction.increaseAmount} uSTX. Txid: ${txidIncreasedDelegation}`
+          );
+          break;
+
+        case 'stack-aggregation-commit-indexed':
+          const txidCommittedDelegation = await commitDelegation(
+            transaction.poxAddress,
+            transaction.rewardCycle,
+            localNonce,
+            poolClient
+          );
+          localNonce++;
+          await savePendingTransaction({
+            ...transaction,
+            txid: txidCommittedDelegation,
+          });
+          console.log(
+            `Commitment for address ${transaction.poxAddress} was committed in cycle ${transaction.rewardCycle}. Txid: ${txidCommittedDelegation}`
+          );
+          break;
+
+        case 'stack-aggregation-increase':
+          const txidCIncreasedCommitment = await increaseCommitment(
+            transaction.poxAddress,
+            transaction.rewardCycle,
+            transaction.rewardIndex,
+            localNonce,
+            poolClient
+          );
+          localNonce++;
+          await savePendingTransaction({
+            ...transaction,
+            txid: txidCIncreasedCommitment,
+          });
+          console.log(
+            `Commitment for address ${transaction.poxAddress} was increased from ${transaction.amountUstx} to ${transaction.finalAmount} uSTX in cycle ${transaction.rewardCycle}. Txid: ${txidCIncreasedCommitment}`
+          );
+          break;
+      }
+    }
+  }
+};
+
+export const removeAnchoredTransactionsFromDatabase = async () => {
+  const dbEntries = await getPendingTransactions();
+
+  for (const transaction of dbEntries) {
+    const transactionData = await fetchTransactionInfo(transaction.txid);
+
+    if (transactionData) {
+      const isTransactionInMempool = transactionData.is_unanchored !== false;
+      if (!isTransactionInMempool) {
+        deletePendingTransaction(transaction.txid);
+      }
+    } else {
+      deletePendingTransaction(transaction.txid);
+    }
+  }
+
+  return await getPendingTransactions();
+};
+
+export const checkAvailableTransactions = (
+  delegations: any,
+  acceptedDelegations: any,
+  committedDelegations: any,
+  currentCycle: number,
+  currentBlock: number
+) => {
+  const availableTransactions: AvailableTransaction[] = [];
+  const MAX_CYCLES =
+    MAX_CYCLES_FOR_OPERATIONS > 12
+      ? 12
+      : MAX_CYCLES_FOR_OPERATIONS < 1
+      ? 1
+      : MAX_CYCLES_FOR_OPERATIONS;
+
+  delegations.forEach(async (value: any, key: any) => {
+    if (!acceptedDelegations.has(key)) {
+      const maxCycles = Math.min(
+        value.endCycle !== null
+          ? value.endCycle - currentCycle - 1
+          : MAX_CYCLES,
+        MAX_CYCLES
+      );
+      const operation = {
+        functionName: 'delegate-stack-stx',
+        stacker: key,
+        amountUstx: value.amountUstx,
+        currentBlock,
+        poxAddress: value.poxAddress,
+        maxCycles,
+      };
+      availableTransactions.push(operation);
+    }
+  });
+
+  acceptedDelegations.forEach(async (delegationList: any, key: any) => {
+    const delegation = delegations.get(key);
+    if (delegation) {
+      const maxExtendCycles = Math.min(
+        MAX_CYCLES -
+          (delegationList[delegationList.length - 1].endCycle - currentCycle),
+        delegation.endCycle !== null
+          ? delegation.endCycle - currentCycle - 1
+          : MAX_CYCLES,
+        delegation.endCycle !== null
+          ? delegation.endCycle -
+              delegationList[delegationList.length - 1].endCycle
+          : MAX_CYCLES
+      );
+      if (maxExtendCycles > 0) {
+        const operation = {
+          functionName: 'delegate-stack-extend',
+          stacker: key,
+          poxAddress: delegationList[delegationList.length - 1].poxAddress,
+          maxExtendCycles,
+        };
+        availableTransactions.push(operation);
+      }
+
+      const totalAcceptedAmount =
+        delegationList[delegationList.length - 1].amountUstx;
+      if (totalAcceptedAmount < delegation.amountUstx) {
+        const increaseAmount = delegation.amountUstx - totalAcceptedAmount;
+        const operation = {
+          functionName: 'delegate-stack-increase',
+          stacker: key,
+          poxAddress: delegationList[delegationList.length - 1].poxAddress,
+          increaseAmount,
+        };
+        availableTransactions.push(operation);
+      }
+    }
+  });
+
+  const poxAddressSet = new Set(
+    [...acceptedDelegations.values()].flat().map((d) => d.poxAddress)
+  );
+
+  poxAddressSet.forEach(async (address) => {
+    const acceptedDelegationsForAddress = [...acceptedDelegations.entries()]
+      .flatMap(([_, delegations]) => delegations)
+      .filter((d) => d.poxAddress === address);
+
+    const maxEndCycleList = Math.max(
+      ...acceptedDelegationsForAddress.map((d) => d.endCycle)
+    );
+    const maxEndCycle = Math.min(currentCycle + MAX_CYCLES, maxEndCycleList);
+
+    const startCycleList = Math.min(
+      ...acceptedDelegationsForAddress.map((d) => d.startCycle)
+    );
+    const startCycle = Math.min(currentCycle + 1, startCycleList);
+
+    if (!committedDelegations.has(address)) {
+      for (
+        let rewardCycle = startCycle;
+        rewardCycle < maxEndCycle;
+        rewardCycle++
+      ) {
+        const operation = {
+          functionName: 'stack-aggregation-commit-indexed',
+          poxAddress: address,
+          rewardCycle,
+        };
+        availableTransactions.push(operation);
+      }
+    } else {
+      const committedDelegationsForAddress = committedDelegations.get(address);
+      const currentCommittedEndCycle = Math.max(
+        ...committedDelegationsForAddress.map((d: any) => d.endCycle)
+      );
+
+      if (currentCommittedEndCycle < maxEndCycle) {
+        for (
+          let rewardCycle = currentCommittedEndCycle;
+          rewardCycle < maxEndCycle;
+          rewardCycle++
+        ) {
+          const operation = {
+            functionName: 'stack-aggregation-commit-indexed',
+            poxAddress: address,
+            rewardCycle,
+          };
+          availableTransactions.push(operation);
+        }
+      }
+    }
+  });
+
+  const temporaryMap = new Map();
+
+  acceptedDelegations.forEach((entries: any) => {
+    entries.forEach((entry: any) => {
+      const { startCycle, endCycle, poxAddress, amountUstx } = entry;
+      if (!temporaryMap.has(poxAddress)) {
+        temporaryMap.set(poxAddress, new Map());
+      }
+      const addressMap = temporaryMap.get(poxAddress);
+      for (let cycle = startCycle; cycle < endCycle; cycle++) {
+        if (!addressMap.has(cycle)) {
+          addressMap.set(cycle, 0);
+        }
+        addressMap.set(cycle, addressMap.get(cycle) + amountUstx);
+      }
+    });
+  });
+
+  const acceptedDelegationsPerPoxAddress = new Map();
+
+  temporaryMap.forEach((cycleMap, poxAddress) => {
+    const cyclesList: any = [];
+    cycleMap.forEach((amountUstx: any, cycle: any) => {
+      cyclesList.push({ cycle, amountUstx });
+    });
+    acceptedDelegationsPerPoxAddress.set(poxAddress, cyclesList);
+  });
+
+  committedDelegations.forEach((delegations: any, address: any) => {
+    const finalEntries = acceptedDelegationsPerPoxAddress.get(address) || [];
+    const finalCycles: Map<number, number> = new Map(
+      finalEntries.map((entry: any) => [entry.cycle, entry.amountUstx])
+    );
+
+    delegations.forEach(
+      async ({ startCycle, endCycle, amountUstx, rewardIndex }: any) => {
+        for (
+          let cycle = startCycle;
+          cycle <
+          (endCycle !== null ? endCycle : currentCycle + MAX_CYCLES + 1);
+          cycle++
+        ) {
+          const finalAmount = finalCycles.get(cycle) || 0;
+          if (
+            amountUstx < finalAmount &&
+            startCycle <= currentCycle + MAX_CYCLES
+          ) {
+            const operation = {
+              functionName: 'stack-aggregation-increase',
+              poxAddress: address,
+              rewardCycle: cycle,
+              rewardIndex,
+              amountUstx,
+              finalAmount,
+            };
+            availableTransactions.push(operation);
+          }
+        }
+      }
+    );
+  });
+
+  return availableTransactions;
+};
+
+export const checkAndBroadcastTransactions = async (
+  delegations: any,
+  acceptedDelegations: any,
+  committedDelegations: any,
+  currentCycle: number,
+  currentBlock: number
+) => {
+  const nonce = await getNonce(POOL_OPERATOR, STACKS_NETWORK_INSTANCE);
+  const poolClient = new StackingClient(POOL_OPERATOR, STACKS_NETWORK_INSTANCE);
+
+  delegations.forEach((value: any, key: any) => {
+    if (value.endCycle !== null && value.endCycle <= currentCycle) {
+      delegations.delete(key);
+    }
+  });
+
+  acceptedDelegations.forEach((value: any, key: any) => {
+    acceptedDelegations.set(
+      key,
+      value.filter((e: any) => e.endCycle > currentCycle)
+    );
+    if (acceptedDelegations.get(key).length === 0) {
+      acceptedDelegations.delete(key);
+    }
+  });
+
+  committedDelegations.forEach((value: any, key: any) => {
+    committedDelegations.set(
+      key,
+      value.filter((e: any) => e.endCycle > currentCycle + 1)
+    );
+    if (committedDelegations.get(key).length === 0) {
+      committedDelegations.delete(key);
+    }
+  });
+
+  const availableTransactions: AvailableTransaction[] =
+    checkAvailableTransactions(
+      delegations,
+      acceptedDelegations,
+      committedDelegations,
+      currentCycle,
+      currentBlock
+    );
+
+  await processTransactions(availableTransactions, nonce, poolClient);
+  await sleep(10000);
 };

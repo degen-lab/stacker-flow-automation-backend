@@ -1,10 +1,12 @@
-import { query } from './db';
+import { all, query } from './db';
 import {
   insertDelegations,
   insertAcceptedDelegations,
   insertCommittedDelegations,
   insertPreviousDelegations,
+  insertPendingTransactions,
 } from './models';
+import { DatabaseEntry } from './types';
 
 export const saveDelegations = async (data: Map<string, any>) => {
   for (const [stacker, value] of data) {
@@ -58,4 +60,36 @@ export const saveCommittedDelegations = async (data: Map<string, any>) => {
       ]);
     }
   }
+};
+
+export const savePendingTransaction = async (entry: DatabaseEntry) => {
+  const {
+    functionName,
+    txid,
+    stacker,
+    poxAddress,
+    startCycle,
+    endCycle,
+    rewardCycle,
+    rewardIndex,
+  } = entry;
+  await query(insertPendingTransactions, [
+    txid,
+    functionName,
+    stacker,
+    poxAddress,
+    startCycle,
+    endCycle,
+    rewardCycle,
+    rewardIndex,
+  ]);
+};
+
+export const getPendingTransactions = async (): Promise<DatabaseEntry[]> => {
+  return await all(`SELECT * FROM PendingTransactions`);
+};
+
+export const deletePendingTransaction = async (txid: string) => {
+  const sql = `DELETE FROM PendingTransactions WHERE txid = ?`;
+  await query(sql, [txid]);
 };

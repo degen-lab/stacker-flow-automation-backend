@@ -38,6 +38,35 @@ export const createCommittedDelegationsTable = `
   );
 `;
 
+export const createPendingTransactionsTable = `
+  CREATE TABLE IF NOT EXISTS PendingTransactions (
+    txid TEXT NOT NULL,
+    functionName TEXT NOT NULL,
+    stacker TEXT,
+    poxAddress TEXT,
+    startCycle INTEGER,
+    endCycle INTEGER,
+    rewardCycle INTEGER,
+    rewardIndex INTEGER
+  );
+`;
+
+export const clearDelegations = `
+  DELETE FROM Delegations;
+`;
+
+export const clearPreviousDelegations = `
+  DELETE FROM PreviousDelegations;
+`;
+
+export const clearAcceptedDelegations = `
+  DELETE FROM AcceptedDelegations;
+`;
+
+export const clearCommittedDelegations = `
+  DELETE FROM CommittedDelegations;
+`;
+
 export const insertDelegations = `
   INSERT INTO Delegations (stacker, startCycle, endCycle, poxAddress, amountUstx)
   VALUES (?, ?, ?, ?, ?)
@@ -56,4 +85,9 @@ export const insertAcceptedDelegations = `
 export const insertCommittedDelegations = `
   INSERT INTO CommittedDelegations (poxAddress, startCycle, endCycle, amountUstx, rewardIndex)
   VALUES (?, ?, ?, ?, ?)
+`;
+
+export const insertPendingTransactions = `
+  INSERT INTO PendingTransactions (txid, functionName, stacker, poxAddress, startCycle, endCycle, rewardCycle, rewardIndex)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `;
