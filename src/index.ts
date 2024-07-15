@@ -1,4 +1,5 @@
 import { fetchPoxInfo } from './api-calls';
+import { runConfigValidator } from './checks';
 import {
   checkAndBroadcastTransactions,
   createTables as createAndClearTables,
@@ -15,6 +16,8 @@ import {
 import { sleep } from './transactions';
 
 const main = async () => {
+  runConfigValidator();
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try {

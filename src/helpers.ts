@@ -894,8 +894,14 @@ export const checkAndBroadcastTransactions = async (
   currentCycle: number,
   currentBlock: number
 ) => {
-  const nonce = await getNonce(POOL_OPERATOR, STACKS_NETWORK_INSTANCE);
-  const poolClient = new StackingClient(POOL_OPERATOR, STACKS_NETWORK_INSTANCE);
+  const nonce = await getNonce(
+    POOL_OPERATOR as string,
+    STACKS_NETWORK_INSTANCE
+  );
+  const poolClient = new StackingClient(
+    POOL_OPERATOR as string,
+    STACKS_NETWORK_INSTANCE
+  );
 
   delegations.forEach((value: any, key: any) => {
     if (value.endCycle !== null && value.endCycle <= currentCycle) {

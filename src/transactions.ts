@@ -134,7 +134,7 @@ export const generateSignature = async (
 ) => {
   await sleep(10);
 
-  const signerKey = convertPrivateKeyToPublicKey(SIGNER_PRIVATE_KEY);
+  const signerKey = convertPrivateKeyToPublicKey(SIGNER_PRIVATE_KEY as string);
   const maxAmount = Number.MAX_SAFE_INTEGER;
   const authId = Date.now();
 
@@ -143,7 +143,7 @@ export const generateSignature = async (
     poxAddress,
     rewardCycle,
     period,
-    signerPrivateKey: createStacksPrivateKey(SIGNER_PRIVATE_KEY),
+    signerPrivateKey: createStacksPrivateKey(SIGNER_PRIVATE_KEY as string),
     maxAmount,
     authId,
   });
