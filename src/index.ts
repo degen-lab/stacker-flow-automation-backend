@@ -13,7 +13,6 @@ import {
   saveDelegations,
   savePreviousDelegations,
 } from './save-data';
-import { sleep } from './transactions';
 
 const main = async () => {
   runConfigValidator();
@@ -54,7 +53,6 @@ const main = async () => {
       console.log('Accepted Delegations:', acceptedDelegations);
       console.log('Committed Delegations:', committedDelegations);
       console.log('Previous Delegations:', previousDelegations);
-      await sleep(10000);
 
       await createAndClearTables();
 

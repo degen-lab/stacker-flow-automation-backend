@@ -733,7 +733,9 @@ export const checkAvailableTransactions = (
     if (delegation) {
       const maxExtendCycles = Math.min(
         MAX_CYCLES -
-          (delegationList[delegationList.length - 1].endCycle - currentCycle),
+          (delegationList[delegationList.length - 1].endCycle -
+            currentCycle -
+            1),
         delegation.endCycle !== null
           ? delegation.endCycle - currentCycle - 1
           : MAX_CYCLES,
@@ -742,7 +744,11 @@ export const checkAvailableTransactions = (
               delegationList[delegationList.length - 1].endCycle
           : MAX_CYCLES
       );
-      if (maxExtendCycles > 0) {
+
+      const totalAcceptedAmount =
+        delegationList[delegationList.length - 1].amountUstx;
+
+      if (maxExtendCycles > 0 && totalAcceptedAmount <= delegation.amountUstx) {
         const operation = {
           functionName: 'delegate-stack-extend',
           stacker: key,
@@ -752,8 +758,6 @@ export const checkAvailableTransactions = (
         availableTransactions.push(operation);
       }
 
-      const totalAcceptedAmount =
-        delegationList[delegationList.length - 1].amountUstx;
       if (totalAcceptedAmount < delegation.amountUstx) {
         const increaseAmount = delegation.amountUstx - totalAcceptedAmount;
         const operation = {
@@ -779,7 +783,7 @@ export const checkAvailableTransactions = (
     const maxEndCycleList = Math.max(
       ...acceptedDelegationsForAddress.map((d) => d.endCycle)
     );
-    const maxEndCycle = Math.min(currentCycle + MAX_CYCLES, maxEndCycleList);
+    const maxEndCycle = Math.max(currentCycle + MAX_CYCLES, maxEndCycleList);
 
     const startCycleList = Math.min(
       ...acceptedDelegationsForAddress.map((d) => d.startCycle)
@@ -789,7 +793,7 @@ export const checkAvailableTransactions = (
     if (!committedDelegations.has(address)) {
       for (
         let rewardCycle = startCycle;
-        rewardCycle < maxEndCycle;
+        rewardCycle <= maxEndCycle;
         rewardCycle++
       ) {
         const operation = {
@@ -922,7 +926,7 @@ export const checkAndBroadcastTransactions = async (
   committedDelegations.forEach((value: any, key: any) => {
     committedDelegations.set(
       key,
-      value.filter((e: any) => e.endCycle > currentCycle + 1)
+      value.filter((e: any) => e.endCycle > currentCycle)
     );
     if (committedDelegations.get(key).length === 0) {
       committedDelegations.delete(key);
