@@ -1,6 +1,12 @@
 import express from 'express';
 import { SERVER_PORT } from './consts';
-import { selectAcceptedDelegations, selectCommittedDelegations, selectDelegations, selectPendingTransactions, selectPreviousDelegations } from './models';
+import {
+  selectAcceptedDelegations,
+  selectCommittedDelegations,
+  selectDelegations,
+  selectPendingTransactions,
+  selectPreviousDelegations,
+} from './models';
 import { dbPromise } from './db';
 
 const app = express();
@@ -19,11 +25,11 @@ const fetchAllData = async () => {
     previousDelegations,
     acceptedDelegations,
     committedDelegations,
-    pendingTransactions
+    pendingTransactions,
   };
 };
 
-app.get('/data', async (_, res) => {
+app.get('/data', async (_: any, res: any) => {
   try {
     const data = await fetchAllData();
     res.json(data);
