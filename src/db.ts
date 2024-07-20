@@ -2,7 +2,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import { DATABASE_PATH } from './consts';
 
-const dbPromise = open({
+export const dbPromise = open({
   filename: DATABASE_PATH,
   driver: sqlite3.Database,
 });

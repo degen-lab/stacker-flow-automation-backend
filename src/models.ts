@@ -67,6 +67,10 @@ export const clearCommittedDelegations = `
   DELETE FROM CommittedDelegations;
 `;
 
+export const clearPendingTransactionsByTxid = `
+  DELETE FROM PendingTransactions WHERE txid = ?
+  `;
+
 export const insertDelegations = `
   INSERT INTO Delegations (stacker, startCycle, endCycle, poxAddress, amountUstx)
   VALUES (?, ?, ?, ?, ?)
@@ -90,4 +94,24 @@ export const insertCommittedDelegations = `
 export const insertPendingTransactions = `
   INSERT INTO PendingTransactions (txid, functionName, stacker, poxAddress, startCycle, endCycle, rewardCycle, rewardIndex)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+export const selectDelegations = `
+  SELECT * FROM Delegations
+`;
+
+export const selectPreviousDelegations = `
+  SELECT * FROM PreviousDelegations
+`;
+
+export const selectAcceptedDelegations = `
+  SELECT * FROM AcceptedDelegations
+`;
+
+export const selectCommittedDelegations = `
+  SELECT * FROM CommittedDelegations
+`;
+
+export const selectPendingTransactions = `
+  SELECT * FROM PendingTransactions
 `;

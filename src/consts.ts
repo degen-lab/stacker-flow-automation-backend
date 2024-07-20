@@ -151,3 +151,4 @@ export const FIRST_POX_4_CYCLE = currentConfig.FIRST_POX_4_CYCLE;
 
 export const LIMIT = 100;
 export const MAX_CYCLES_FOR_OPERATIONS = 12;
+export const SERVER_PORT = 8080;

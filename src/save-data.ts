@@ -5,6 +5,8 @@ import {
   insertCommittedDelegations,
   insertPreviousDelegations,
   insertPendingTransactions,
+  selectPendingTransactions,
+  clearPendingTransactionsByTxid,
 } from './models';
 import { DatabaseEntry } from './types';
 
@@ -86,10 +88,9 @@ export const savePendingTransaction = async (entry: DatabaseEntry) => {
 };
 
 export const getPendingTransactions = async (): Promise<DatabaseEntry[]> => {
-  return await all(`SELECT * FROM PendingTransactions`);
+  return await all(selectPendingTransactions);
 };
 
 export const deletePendingTransaction = async (txid: string) => {
-  const sql = `DELETE FROM PendingTransactions WHERE txid = ?`;
-  await query(sql, [txid]);
+  await query(clearPendingTransactionsByTxid, [txid]);
 };
