@@ -8,8 +8,10 @@ import {
   selectPreviousDelegations,
 } from './models';
 import { dbPromise } from './db';
+import cors from 'cors';
 
 const app = express();
+app.use(cors());
 
 const fetchAllData = async () => {
   const db = await dbPromise;
