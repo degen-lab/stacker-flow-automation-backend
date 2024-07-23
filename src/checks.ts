@@ -1,6 +1,7 @@
 import { validateStacksAddress } from '@stacks/transactions';
 import {
   BITCOIN_NETWORK_NAME,
+  MAX_CYCLES_FOR_OPERATIONS,
   NETWORK,
   POOL_BTC_ADDRESS,
   POOL_OPERATOR,
@@ -48,4 +49,7 @@ export const runConfigValidator = () => {
 
   if (isNullOrEmpty(SIGNER_PRIVATE_KEY))
     throw 'Config: invalid signer private key';
+
+  if (MAX_CYCLES_FOR_OPERATIONS < 1 || MAX_CYCLES_FOR_OPERATIONS > 12)
+    throw 'Config: max cycles for operations out of bounds (1 <= max cycles <= 12)';
 };

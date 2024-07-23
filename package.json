@@ -8,8 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/index.js",
-    "dev": "npx tsx src/index.ts",
+    "start": "npx tsx src/index.ts",
     "server": "npx tsx src/server.ts",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",
